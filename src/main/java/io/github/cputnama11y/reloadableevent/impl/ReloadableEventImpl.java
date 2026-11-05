@@ -133,12 +133,10 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
     }
 
     static {
-        Identifier repairPhase = Identifier.fromNamespaceAndPath("fabric", "repair_failed_events");
-        Identifier bindPhase = Identifier.fromNamespaceAndPath("fabric", "bind_new_events");
+        Identifier updatePhase = Identifier.fromNamespaceAndPath("fabric", "update_events");
         Identifier killPhase = Identifier.fromNamespaceAndPath("fabric", "kill_old_events");
-        ServerLifecycleEvents.END_DATA_PACK_RELOAD.addPhaseOrdering(repairPhase, Event.DEFAULT_PHASE);
-        ServerLifecycleEvents.END_DATA_PACK_RELOAD.addPhaseOrdering(bindPhase, Event.DEFAULT_PHASE);
-        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register(repairPhase, (server, resourceManager, success) -> {
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.addPhaseOrdering(updatePhase, Event.DEFAULT_PHASE);
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register(updatePhase, (server, resourceManager, success) -> {
             if (!success) {
                 REGISTRY.forEach(event -> {
                     var eventImpl = (ReloadableEventImpl<?>) event;
@@ -146,10 +144,7 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
                         eventImpl.restoreBackupIfPresent();
                     }
                 });
-            }
-        });
-        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register(bindPhase, (server, resourceManager, success) -> {
-            if (success) {
+            } else {
                 REGISTRY.forEach(event -> {
                     var eventImpl = (ReloadableEventImpl<?>) event;
                     if (eventImpl.applicableDuringReload()) {
