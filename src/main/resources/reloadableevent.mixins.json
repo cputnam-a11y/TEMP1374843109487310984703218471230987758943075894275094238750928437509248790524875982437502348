@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "io.github.cputnama11y.reloadableevent.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "ReloadableServerResourcesMixin",
+    "ReloadableServerResourcesRegistriesMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+	}
+}
