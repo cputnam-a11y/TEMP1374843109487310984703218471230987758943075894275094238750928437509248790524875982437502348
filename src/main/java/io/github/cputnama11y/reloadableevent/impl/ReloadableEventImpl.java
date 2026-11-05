@@ -162,7 +162,10 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
         });
 
         ServerLifecycleEvents.SERVER_STOPPED.register(killPhase, server -> {
-
+            REGISTRY.forEach(event -> {
+                var eventImpl = (ReloadableEventImpl<?>) event;
+                eventImpl.unbind();
+            });
         });
     }
 
