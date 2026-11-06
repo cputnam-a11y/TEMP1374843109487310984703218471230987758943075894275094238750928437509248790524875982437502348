@@ -34,6 +34,7 @@ import java.util.concurrent.Executor;
 public class ReloadableServerResourcesMixin implements Duck {
     @Unique
     private final MutableConstantObject<RegistryAccess.Frozen> layers = MutableConstantObject.create();
+
     @Inject(
             method = "<init>",
             at = @At("CTOR_HEAD")
@@ -49,14 +50,10 @@ public class ReloadableServerResourcesMixin implements Duck {
     private static CompletableFuture<ReloadableServerResources> wrapLoadResources(ResourceManager resourceManager, LayeredRegistryAccess<RegistryLayer> contextLayers, List<Registry.PendingTags<?>> updatedContextTags, FeatureFlagSet enabledFeatures, Commands.CommandSelection commandSelection, PermissionSet functionCompilationPermissions, Executor backgroundExecutor, Executor mainThreadExecutor, Operation<CompletableFuture<ReloadableServerResources>> original) {
         var events = new PendingEvents(buildStableMap());
         Executor newMainThreadExecutor = r -> {
-            IO.println("Running: " + r);
             mainThreadExecutor.execute(() -> ScopedValue.where(PendingEvents.EVENTS, events).run(r));
-            IO.println("Ran: " + r);
         };
         Executor newBackgroundExecutor = r -> {
-            IO.println("Running: " + r);
             backgroundExecutor.execute(() -> ScopedValue.where(PendingEvents.EVENTS, events).run(r));
-            IO.println("Ran: " + r);
         };
         return ScopedValue.where(PendingEvents.EVENTS, events).call(() -> original.call(resourceManager, contextLayers, updatedContextTags, enabledFeatures, commandSelection, functionCompilationPermissions, newBackgroundExecutor, newMainThreadExecutor));
     }
