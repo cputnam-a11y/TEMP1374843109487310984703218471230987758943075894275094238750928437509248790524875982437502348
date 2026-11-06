@@ -17,12 +17,12 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Unit;
-import org.apache.commons.lang3.mutable.MutableObject;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.function.Function;
 
-public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identifier key, MutableConstantObject<Event<T>> event, Registry<MapCodec<? extends T>> types, ResourceKey<? extends Registry<PhaseData>> phases, ResourceKey<? extends Registry<Phased<T>>> callbacks, boolean applicableDuringReload, MutableObject<Event<T>> backup, Class<T> eventClass, Function<T[], T> invokerFactory) implements ReloadableEvent<T> {
+public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identifier key, MutableConstantObject<Event<T>> event, Registry<MapCodec<? extends T>> types, ResourceKey<? extends Registry<PhaseData>> phases, ResourceKey<? extends Registry<Phased<T>>> callbacks, Class<T> eventClass, Function<T[], T> invokerFactory) implements ReloadableEvent<T> {
     public static final MapCodec<? extends MapTyped<?>> INVOKER_TYPE = MapCodec.unit(Unit.INSTANCE).flatXmap(
             _ -> DataResult.error(() -> "Cannot deserialize invoker"),
             _ -> DataResult.error(() -> "Cannot serialize invoker")
@@ -32,7 +32,7 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
     );
     public static final Registry<ReloadableEvent<?>> REGISTRY = FabricRegistryBuilder.create(KEY).buildAndRegister();
 
-    public ReloadableEventImpl(Identifier key, boolean applicableDuringReload, Class<T> eventClass, Function<T[], T> invokerFactory) {
+    public ReloadableEventImpl(Identifier key, Class<T> eventClass, Function<T[], T> invokerFactory) {
         this(
                 key,
                 MutableConstantObject.create(),
@@ -53,9 +53,8 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
                                 .withSuffix("/" + key.getNamespace())
                                 .withSuffix("/" + key.getPath())
                 ),
-                applicableDuringReload,
-                new MutableObject<>(),
-                eventClass, invokerFactory
+                eventClass,
+                invokerFactory
         );
         //noinspection unchecked
         Registry.register(this.types, Identifier.fromNamespaceAndPath("fabric", "invoker"), (MapCodec<? extends T>) INVOKER_TYPE);
@@ -67,41 +66,36 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
         )).codec());
     }
 
-    private void restoreBackupIfPresent() {
-        var backup = this.backup.get();
-        if (backup != null) event.accept(backup);
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nullable T pendingInvoker() {
+        if (PendingEvents.EVENTS.isBound()) return (T) PendingEvents.EVENTS.get().events().get(this).get().invoker();
+        else return invoker();
     }
 
     private void unbind() {
         this.event.accept(null);
-        this.backup.setValue(null);
     }
 
-    private void discardBackup() {
-        this.backup.setValue(null);
-    }
-
-    public void fillFromRegistry(RegistryAccess.Frozen frozen, boolean isReload) {
-        if (this.applicableDuringReload() == isReload) {
-            if (this.applicableDuringReload()) {
-                this.backup.setValue(this.event.get());
-            }
-
-            var event = EventFactory.createArrayBacked(eventClass, invokerFactory);
-            var registries = frozen.lookup(this.callbacks).flatMap(callbacks -> frozen.lookup(this.phases).map(phases -> Pair.of(callbacks, phases)));
-            registries.ifPresent(it -> {
-                it.getSecond().listElements().forEach(phase -> {
-                    var id = phase.key().identifier();
-                    if (id.equals(Event.DEFAULT_PHASE)) return;
-                    phase.value().before.forEach(before -> event.addPhaseOrdering(id, before));
-                    phase.value().after.forEach(after -> event.addPhaseOrdering(after, id));
-                });
-
-                it.getFirst().forEach(phased -> event.register(phased.phase(), phased.callback()));
+    public Event<T> createFromRegistry(RegistryAccess.Frozen frozen) {
+        var event = EventFactory.createArrayBacked(eventClass, invokerFactory);
+        var registries = frozen.lookup(this.callbacks).flatMap(callbacks -> frozen.lookup(this.phases).map(phases -> Pair.of(callbacks, phases)));
+        registries.ifPresent(it -> {
+            it.getSecond().listElements().forEach(phase -> {
+                var id = phase.key().identifier();
+                if (id.equals(Event.DEFAULT_PHASE)) return;
+                phase.value().before.forEach(before -> event.addPhaseOrdering(id, before));
+                phase.value().after.forEach(after -> event.addPhaseOrdering(after, id));
             });
 
-            this.event.accept(event);
-        }
+            it.getFirst().forEach(phased -> event.register(phased.phase(), phased.callback()));
+        });
+        return event;
+    }
+
+    public void fillFromRegistry(RegistryAccess.Frozen frozen) {
+        var event = createFromRegistry(frozen);
+        this.event.accept(event);
     }
 
     @Override
@@ -136,49 +130,36 @@ public record ReloadableEventImpl<T extends ReloadableEvent.MapTyped<T>>(Identif
         Identifier updatePhase = Identifier.fromNamespaceAndPath("fabric", "update_events");
         Identifier killPhase = Identifier.fromNamespaceAndPath("fabric", "kill_old_events");
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.addPhaseOrdering(updatePhase, Event.DEFAULT_PHASE);
-        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register(updatePhase, (server, resourceManager, success) -> {
-            if (!success) {
+        ServerLifecycleEvents.SERVER_STARTING.addPhaseOrdering(updatePhase, Event.DEFAULT_PHASE);
+        ServerLifecycleEvents.SERVER_STOPPED.addPhaseOrdering(Event.DEFAULT_PHASE, killPhase);
+        ServerLifecycleEvents.SERVER_STARTING.register(updatePhase, server -> {
+            REGISTRY.forEach(event -> {
+                ((ReloadableEventImpl<?>) event).fillFromRegistry(((Duck) server.resources.managers()).reloadableevent$getAccess());
+            });
+        });
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register(updatePhase, (server, _, success) -> {
+            if (success) {
                 REGISTRY.forEach(event -> {
-                    var eventImpl = (ReloadableEventImpl<?>) event;
-                    if (eventImpl.applicableDuringReload()) {
-                        eventImpl.restoreBackupIfPresent();
-                    }
-                });
-            } else {
-                REGISTRY.forEach(event -> {
-                    var eventImpl = (ReloadableEventImpl<?>) event;
-                    if (eventImpl.applicableDuringReload()) {
-                        eventImpl.discardBackup();
-                    } else {
-                        eventImpl.fillFromRegistry(((Duck) server.resources.managers()).reloadableevent$getAccess(), false);
-                    }
+                    ((ReloadableEventImpl<?>) event).fillFromRegistry(((Duck) server.resources.managers()).reloadableevent$getAccess());
                 });
             }
         });
 
-        ServerLifecycleEvents.SERVER_STOPPED.register(killPhase, server -> {
+        ServerLifecycleEvents.SERVER_STOPPED.register(killPhase, _ -> {
             REGISTRY.forEach(event -> {
-                var eventImpl = (ReloadableEventImpl<?>) event;
-                eventImpl.unbind();
+                ((ReloadableEventImpl<?>) event).unbind();
             });
         });
     }
 
-    public static void bindEarlyReloadable(RegistryAccess.Frozen frozen) {
+    public static void bindForReload(RegistryAccess.Frozen frozen, PendingEvents events) {
         REGISTRY.forEach(event -> {
             var eventImpl = (ReloadableEventImpl<?>) event;
-            if (eventImpl.applicableDuringReload()) {
-                eventImpl.fillFromRegistry(frozen, true);
-            }
+            events.events().get(eventImpl).accept(eventImpl.createFromRegistry(frozen));
         });
     }
 
     public static <T extends MapTyped<T>> ReloadableEvent<T> createAndRegister(Identifier id, Class<T> eventClass, Function<T[], T> invokerFactory) {
-        return Registry.register(REGISTRY, id, new ReloadableEventImpl<T>(id, false, eventClass, invokerFactory));
+        return Registry.register(REGISTRY, id, new ReloadableEventImpl<>(id, eventClass, invokerFactory));
     }
-
-    public static <T extends MapTyped<T>> ReloadableEvent<T> createEarlyReloadAndRegister(Identifier id, Class<T> eventClass, Function<T[], T> invokerFactory) {
-        return Registry.register(REGISTRY, id, new ReloadableEventImpl<T>(id, true, eventClass, invokerFactory));
-    }
-
 }

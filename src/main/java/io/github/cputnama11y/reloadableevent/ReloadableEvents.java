@@ -13,8 +13,25 @@ import org.slf4j.LoggerFactory;
 public class ReloadableEvents implements ModInitializer {
     public static final String MOD_ID = "reloadableevent";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final ReloadableEvent<Listener> event = ReloadableEvent.createAndRegister(
+            Identifier.withDefaultNamespace("demo"),
+            Listener.class,
+            listeners -> new Listener() {
+                @Override
+                public void listenTo(String advice) {
+                    for (Listener listener : listeners) {
+                        listener.listenTo(advice);
+                    }
+                }
 
-    interface Listener extends ReloadableEvent.MapTyped<Listener> {
+                @Override
+                public MapCodec<? extends Listener> type() {
+                    return ReloadableEvent.invokerType();
+                }
+            }
+    );
+
+    public interface Listener extends ReloadableEvent.MapTyped<Listener> {
         void listenTo(String advice);
     }
 
@@ -34,27 +51,11 @@ public class ReloadableEvents implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        var event = ReloadableEvent.createEarlyReloadAndRegister(
-                Identifier.withDefaultNamespace("demo"),
-                Listener.class,
-                listeners -> new Listener() {
-                    @Override
-                    public void listenTo(String advice) {
-                        for (Listener listener : listeners) {
-                            listener.listenTo(advice);
-                        }
-                    }
-
-                    @Override
-                    public MapCodec<? extends Listener> type() {
-                        return ReloadableEvent.invokerType();
-                    }
-                }
-        );
-
         event.registerType(Identifier.fromNamespaceAndPath("fabric", "speaker"), Speaker.CODEC);
 
-        ServerLifecycleEvents.SERVER_STARTED.register(_ -> event.invoker().listenTo("The Odyssey"));
+        ServerLifecycleEvents.SERVER_STARTED.register(_ -> {
+            event.pendingInvoker().listenTo("The Odyssey");
+        });
     }
 
     public static Identifier id(String path) {
