@@ -4,9 +4,12 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.cputnama11y.reloadableevent.impl.ReloadableEventImpl;
+import net.fabricmc.fabric.api.datagen.v1.FabricDataGenerator;
 import net.fabricmc.fabric.api.event.Event;
+import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.MultiRegistryBootstrap;
+import net.minecraft.data.DataProvider;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Util;
@@ -15,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 public interface ReloadableEvent<T extends ReloadableEvent.MapTyped<T>> {
     @Nullable T invoker();
@@ -23,7 +27,11 @@ public interface ReloadableEvent<T extends ReloadableEvent.MapTyped<T>> {
 
     void register(Identifier id, MapCodec<? extends T> type);
 
-    MultiRegistryBootstrap bootstrap(Bootstrap<T> bootstrap);
+    FabricDataGenerator.Pack.RegistryDependentFactory<DataProvider> provider();
+    FabricDataGenerator.Pack.RegistryDependentFactory<DataProvider> provider(Predicate<Holder<Phased<T>>> callbackPredicate, Predicate<Holder<PhaseData>> phasePredicate);
+
+    @SuppressWarnings("unchecked")
+    MultiRegistryBootstrap bootstrap(Bootstrap<T> bootstrap, ResourceKey<? extends Registry<?>>... additionalRegistries);
 
     static <T extends MapTyped<T>> ReloadableEvent<T> createAndRegister(Identifier id, Class<T> eventClass, Function<T[], T> invokerFactory) {
         return ReloadableEventImpl.createAndRegister(id, eventClass, invokerFactory);
@@ -45,10 +53,14 @@ public interface ReloadableEvent<T extends ReloadableEvent.MapTyped<T>> {
     }
 
     interface Bootstrap<T> {
-        MultiRegistryBootstrap create(ResourceKey<Registry<Phased<T>>> callbacks, ResourceKey<Registry<PhaseData>> phases);
+        Consumer<MultiRegistryBootstrap.BootstrapGetter> create(ResourceKey<Registry<Phased<T>>> callbacks, ResourceKey<Registry<PhaseData>> phases);
     }
 
     record Phased<T>(T callback, Identifier phase) {
+        public Phased(T callback) {
+            this(callback, Event.DEFAULT_PHASE);
+        }
+
         public static <T> MapCodec<Phased<T>> codec(MapCodec<T> codec) {
             return RecordCodecBuilder.mapCodec(instance -> instance.group(
                     codec.forGetter(Phased::callback),

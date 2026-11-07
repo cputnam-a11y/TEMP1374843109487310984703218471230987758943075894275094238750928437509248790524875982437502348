@@ -1,7 +1,6 @@
 package io.github.cputnama11y.reloadableevent.test;
 
 import com.mojang.serialization.MapCodec;
-import io.github.cputnama11y.reloadableevent.ReloadableEvents;
 
 public class Speaker implements Listener {
     public static final MapCodec<Speaker> CODEC = MapCodec.unit(Speaker::new);

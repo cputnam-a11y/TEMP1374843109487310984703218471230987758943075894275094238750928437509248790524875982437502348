@@ -16,10 +16,10 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-          "io.github.cputnama11y.reloadableevent.ReloadableEvents"
+          "io.github.cputnama11y.reloadableevent.test.ReloadableEvents"
 		],
 		"fabric-datagen": [
-			"io.github.cputnama11y.reloadableevent.ReloadableEventDataGenerator"
+			"io.github.cputnama11y.reloadableevent.test.ReloadableEventDatagen"
 		]
 	},
 	"mixins": [

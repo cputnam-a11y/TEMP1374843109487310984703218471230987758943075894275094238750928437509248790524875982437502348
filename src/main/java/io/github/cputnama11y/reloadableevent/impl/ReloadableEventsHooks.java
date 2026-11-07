@@ -72,7 +72,8 @@ public class ReloadableEventsHooks {
     }
 
     public static PendingEvents getCurrentOrCreate() {
-        return PENDING_EVENTS.orElse(buildPendingEvents());
+        if (PENDING_EVENTS.isBound()) return PENDING_EVENTS.get();
+        return buildPendingEvents();
     }
 
     static {
