@@ -2,6 +2,6 @@ package io.github.cputnama11y.reloadableevent.impl;
 
 import net.minecraft.core.RegistryAccess;
 
-public interface Duck {
+public interface RegistryAccessAccess {
     RegistryAccess.Frozen reloadableevent$getAccess();
 }

@@ -3,8 +3,10 @@
   "package": "io.github.cputnama11y.reloadableevent.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "MinecraftServerMixin",
+    "ReloadableServerRegistriesMixin",
     "ReloadableServerResourcesMixin",
-    "ReloadableServerRegistriesMixin"
+    "WorldLoaderMixin"
   ],
   "injectors": {
     "defaultRequire": 1

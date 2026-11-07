@@ -2,8 +2,7 @@ package io.github.cputnama11y.reloadableevent.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
-import io.github.cputnama11y.reloadableevent.impl.PendingEvents;
-import io.github.cputnama11y.reloadableevent.impl.ReloadableEventImpl;
+import io.github.cputnama11y.reloadableevent.impl.ReloadableEventsHooks;
 import net.minecraft.core.LayeredRegistryAccess;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.RegistryLayer;
@@ -22,8 +21,8 @@ public class ReloadableServerRegistriesMixin {
     )
     private static CompletableFuture<RegistryAccess.Frozen> bindEvents(CompletableFuture<RegistryAccess.Frozen> original, final LayeredRegistryAccess<RegistryLayer> context, @Local(argsOnly = true, name = "executor") Executor executor) {
         return original.thenApplyAsync(frozen -> {
-            if (PendingEvents.EVENTS.isBound()) {
-                ReloadableEventImpl.bindForReload(context.replaceFrom(RegistryLayer.RELOADABLE, frozen).compositeAccess(), PendingEvents.EVENTS.get());
+            if (ReloadableEventsHooks.PENDING_EVENTS.isBound()) {
+                ReloadableEventsHooks.bindForReload(context.replaceFrom(RegistryLayer.RELOADABLE, frozen).compositeAccess(), ReloadableEventsHooks.PENDING_EVENTS.get());
             }
             // do events
             return frozen;
